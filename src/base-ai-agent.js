@@ -120,6 +120,65 @@ Be concise but thorough in your review.
         return prompt;
     }
 
+
+    /**
+     * Formats previous AI comments into a message for the LLM.
+     * Includes file path, comment body, and diff_hunk for context.
+     *
+     * @param {Array} comments - Filtered previous AI comments
+     * @returns {string|null} Formatted message for LLM or null if no comments
+     */
+    formatPreviousCommentsMessage(comments) {
+        if (!comments || comments.length === 0) {
+            return null;
+        }
+
+        const formattedComments = comments.map((comment, index) => {
+            const lineRange = comment.start_line && comment.start_line !== comment.end_line
+                ? `lines ${comment.start_line}-${comment.end_line}`
+                : `line ${comment.end_line}`;
+
+            return `
+=============================================================================
+
+COMMENT #${index + 1}
+File: ${comment.path} (${comment.side} side, ${lineRange})
+
+Your previous comment:
+"${comment.comment}"
+
+Code context when you commented:
+\`\`\`diff
+${comment.diff_hunk}
+\`\`\`
+`.trim();
+        }).join('\n\n');
+
+        return `CRITICAL: DUPLICATE COMMENT PREVENTION
+
+You have already made ${comments.length} review comment(s) on files in this review:
+
+${formattedComments}
+
+=============================================================================
+
+DO NOT make duplicate comments.
+
+A comment is a DUPLICATE if it discusses the SAME ISSUE on the SAME CODE, even if the wording is different.
+
+Before making ANY comment, explicitly check: "Did I already comment on this specific issue in this file?"
+
+Compare your draft comment against the previous comments above:
+- Is it the same file?
+- Is it the same code location? (compare diff_hunk context, not just line numbers)
+- Is it the same problem? (same variable, same type of issue, same recommendation)
+
+If YES to all three → DO NOT COMMENT (it's a duplicate, even if worded differently)
+If NO to any → You may comment (it's a new issue)
+
+Focus only on NEW issues not already covered by your previous comments.`;
+    }
+
     handleError(error, message, throwError = true) {
         const fullMessage = `${message}: ${error.message}`;
         console.error(fullMessage);

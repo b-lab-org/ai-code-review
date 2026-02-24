@@ -222,7 +222,7 @@ class OpenAIAgent extends BaseAIAgent {
     /**
      * Entrypoint called by the GitHub Action runner.
      */
-    async doReview(changedFiles) {
+    async doReview(changedFiles, previousComments) {
         let reviewSummary = "";
 
         /* simplify diff metadata to keep prompt small */
@@ -253,6 +253,16 @@ class OpenAIAgent extends BaseAIAgent {
                 2
             )}`
         });
+
+        /* previous comments context (if any) */
+        const previousCommentsMsg = this.formatPreviousCommentsMessage(previousComments);
+        if (previousCommentsMsg) {
+            core.info('previous: ' + previousCommentsMsg);
+            reviewState.messageHistory.push({
+                role: "user",
+                content: previousCommentsMsg
+            });
+        }
 
         try {
             core.info(`Sending initial request to OpenAI with model: ${this.model}`);

@@ -16,7 +16,7 @@ class AnthropicAgent extends BaseAIAgent {
         return true;
     }
 
-    async doReview(changedFiles) {
+    async doReview(changedFiles, previousComments) {
         let reviewSummary = '';
         const simpleChangedFiles = changedFiles.map(file => ({
             filename: file.filename,
@@ -33,7 +33,7 @@ class AnthropicAgent extends BaseAIAgent {
 
             for (let retries = 0; retries < maxRetries; retries++) {
                 try {
-                    reviewSummary = await this.processReview(simpleChangedFiles);
+                    reviewSummary = await this.processReview(simpleChangedFiles, previousComments);
                     break;
                 } catch (error) {
                     if (retries >= maxRetries - 1) {
@@ -84,7 +84,7 @@ class AnthropicAgent extends BaseAIAgent {
         return processedMessages;
     }
 
-    async processReview(changedFiles) { const reviewState = {
+    async processReview(changedFiles, previousComments) { const reviewState = {
             summary: '',
             reviewedFiles: new Set(),
             commentsMade: 0,
@@ -181,6 +181,20 @@ class AnthropicAgent extends BaseAIAgent {
             };
 
             reviewState.messageHistory.push(initialUserMessage);
+
+            /* previous comments context (if any) */
+            const previousCommentsMsg = this.formatPreviousCommentsMessage(previousComments);
+            if (previousCommentsMsg) {
+                reviewState.messageHistory.push({
+                    role: 'user',
+                    content: [
+                        {
+                            type: 'text',
+                            text: previousCommentsMsg
+                        }
+                    ]
+                });
+            }
 
             const initialMessage = await this.anthropic.messages.create({
                 model: this.model,

@@ -14,7 +14,8 @@ const main = async () => {
         }
         
         const aiAgent = inputProcessor.getAIAgent();
-        const reviewSummary = await aiAgent.doReview(inputProcessor.filteredDiffs);
+        const previousComments = inputProcessor.previousComments;
+        const reviewSummary = await aiAgent.doReview(inputProcessor.filteredDiffs, previousComments);
         if (!reviewSummary || typeof reviewSummary !== 'string' || reviewSummary.trim() === '') {
             throw new Error('AI Agent did not return a valid review summary');
         }

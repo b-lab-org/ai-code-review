@@ -11,7 +11,7 @@ const DeepseekAgent = require("./deepseek-agent");
 const XAgent = require("./x-agent");
 const PerplexityAgent = require("./perplexity-agent");
 const { AI_REVIEW_COMMENT_PREFIX, SUMMARY_SEPARATOR } = require("./constants");
-const { filterPatchHunks } = require("./patch-utils");
+const { filterPatchHunks, extractRelevantDiffHunk } = require("./patch-utils");
 
 /* -------------------------------------------------------------------------- */
 /*                               Sanitizers                                   */
@@ -89,6 +89,8 @@ class InputProcessor {
         this._fileCommentator = null;
         this._reviewRulesFile = null;
         this._reviewRulesContent = null;
+        this._aiBotUsername = null;
+        this._previousAIComments = [];
     }
 
     /* ----------------------------- Public API ------------------------------ */
@@ -98,6 +100,7 @@ class InputProcessor {
         this._validateInputs();
         await this._setupGitHubAPI();
         await this._processChangedFiles();
+        await this._loadPreviousReviewComments();
         await this._loadReviewRules(); // Load review rules after GitHub API is set up
         this._setupReviewTools();
         return this;
@@ -120,6 +123,9 @@ class InputProcessor {
         this._includePaths = sanitizePath(core.getInput("include_paths"));
         this._excludePaths = sanitizePath(core.getInput("exclude_paths"));
         this._reviewRulesFile = sanitizePath(core.getInput("review_rules_file"));
+        this._aiBotUsername = sanitizeString(core.getInput("ai_bot_username")) || "github-actions[bot]";
+
+        core.info(`AI bot username: ${this._aiBotUsername}`);
 
         if (!this._includeExtensions) {
             core.info("Using default: include all extensions");
@@ -339,6 +345,55 @@ class InputProcessor {
         return filteredFiles;
     }
 
+    /**
+     * Loads previous AI review comments from the PR and filters them to only
+     * include comments on files currently being reviewed.
+     *
+     * This helps prevent duplicate comments when line numbers shift due to merges.
+     */
+    async _loadPreviousReviewComments() {
+        core.info(`Loading previous AI review comments from bot: ${this._aiBotUsername}`);
+
+        const reviewComments = await this._githubAPI.listPRReviewComments(
+            this._owner,
+            this._repo,
+            this._pullNumber
+        );
+
+        // Filter to only include AI-generated comments on files being reviewed
+        const fileSet = new Set(this._filteredDiffs.map((f) => f.filename));
+
+        this._previousAIComments = reviewComments
+            .filter(
+                (comment) =>
+                    fileSet.has(comment.path) &&
+                    comment.user &&
+                    comment.user.login === this._aiBotUsername
+            )
+            .map((comment) => {
+                // Prefer current line numbers, fall back to original if code has shifted
+                const endLine = comment.line ?? comment.original_line;
+                const startLine = comment.start_line ?? comment.original_start_line ?? endLine;
+
+                return {
+                    path: comment.path,
+                    side: comment.side,
+                    start_line: startLine,
+                    end_line: endLine,
+                    comment: comment.body,
+                    diff_hunk: extractRelevantDiffHunk(
+                        comment.diff_hunk,
+                        startLine,
+                        endLine,
+                        comment.side
+                    ),
+                };
+            })
+            .filter(comment => comment.diff_hunk !== null); // Skip comments that couldn't be parsed
+
+        core.info(`Found ${this._previousAIComments.length} previous AI review comments on files being reviewed`);
+    }
+
     _filterChangedFiles(changedFiles, includeExtensions, excludeExtensions, includePaths, excludePaths) {
         const toArray = str => (str ? str.split(",").map(s => s.trim()).filter(Boolean) : []);
 
@@ -430,6 +485,7 @@ class InputProcessor {
     get owner() { return this._owner; }
     get pullNumber() { return this._pullNumber; }
     get failAction() { return this._failAction; }
+    get previousComments() { return this._previousAIComments; }
 }
 
 module.exports = InputProcessor;

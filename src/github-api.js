@@ -176,6 +176,15 @@ class GitHubAPI {
         return comments;
     }
 
+    async listPRReviewComments(owner, repo, prNumber) {
+        core.info(`listPRReviewComments()`);
+        const comments = await this.octokit.paginate(
+            this.octokit.rest.pulls.listReviewComments,
+            { owner, repo, pull_number: prNumber }
+        );
+        return comments;
+    }
+
     async listPRCommits(owner, repo, prNumber) {
         core.info(`listPRCommits()`);
         const commits = await this.octokit.paginate(

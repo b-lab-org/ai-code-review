@@ -82,6 +82,10 @@ inputs:
   review_rules_file:
     description: 'Path to a file containing custom review rules to be added to the AI system prompt.'
     required: false
+  ai_bot_username:
+    description: 'GitHub username of the AI bot making review comments (used to filter previous comments). Default is "github-actions[bot]"'
+    required: false
+    default: 'github-actions[bot]'
 
 runs:
   using: 'node20'

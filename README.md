@@ -20,6 +20,16 @@ This filtering works at the **hunk level** (individual change blocks within file
 
 **Note**: This is a best-effort approach and may not be perfect in all scenarios. Complex merge situations or interleaved changes might still include some merge-related code in the review.
 
+### Duplicate Comment Prevention (Best Effort)
+When performing incremental reviews, the action attempts to prevent the AI from posting duplicate comments on the same issues, even when line numbers have shifted due to merges or rebases.
+
+This prevention works by providing the AI with context about previous comments:
+- Retrieves previous AI review comments from the PR
+- Extracts relevant code context (diff hunks) for each previous comment
+- Instructs the AI to check for semantic similarity before posting new comments
+
+**Note**: This is a best-effort approach that relies on the AI model's ability to recognize duplicate issues. In some cases, the AI may still post similar comments if it perceives them as addressing different aspects of the same code or if the code context has changed significantly.
+
 ## Inputs
 
 ***token*** - Required. This GitHub token is used for authentication and to access your GitHub repository.
