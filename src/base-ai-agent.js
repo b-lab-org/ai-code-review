@@ -109,6 +109,28 @@ When complete, call the mark_as_done tool with a brief summary of the review. Th
 - DO NOT ask questions or request more information in the summary
 - DO NOT mention "I couldn't see the changes" - use the tools to retrieve any content you need
 
+SUMMARY REQUIREMENTS:
+
+You MUST always provide a meaningful summary that describes what code was reviewed, even if you found no issues. A summary is required for every review.
+
+DO NOT write summaries like these BAD EXAMPLES:
+- "No review comments to add."
+- "Proceeding to summary."
+- "Code looks good."
+- "No issues found."
+- "No issues found that warrant inline comments on the changed lines."
+- "I will now review the changes by examining the modified files..."
+- Do NOT include "Actions taken:" sections listing which files you reviewed
+- Do NOT include "Review comments added:" sections listing where you posted comments
+- Do NOT structure your summary with separate labeled sections like "Summary:", "Overview:", "Quality:", "Patterns:"
+- Do NOT use future tense ("I will review...") or describe the review process itself
+
+INSTEAD write summaries like these GOOD EXAMPLES:
+- "This PR adds input validation to the user registration endpoint in auth-service.js. The changes include email format checking, password strength requirements, and SQL injection prevention through parameterized queries. The implementation correctly handles edge cases such as empty strings and null values. No security vulnerabilities were identified in the modified code. Overall the changes improve the security posture of the authentication system."
+- "This PR refactors the database connection pooling logic by extracting configuration into a separate module and replacing callback-based queries with async/await. The refactoring improves code readability and maintainability without changing functionality. Connection error handling is preserved correctly. All database operations maintain their original behavior and no race conditions were introduced."
+
+Your summary should be a single cohesive paragraph (or a few short paragraphs) describing WHAT changed, WHY it matters, and the QUALITY of the changes. Write in past tense about the code changes, not about your review process.
+
 Lines are 1-indexed. Do not comment on trivial issues or style preferences.
 Be concise but thorough in your review.
 => MODE NO-FALSE-POSITIVES IS ON.`;

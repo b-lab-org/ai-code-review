@@ -210,6 +210,7 @@ class OpenAIAgent extends BaseAIAgent {
 
             /* ──────────────  if no tool calls: maybe final summary ────────────── */
             if (message.content && !reviewState.summary) {
+                core.warning("AI did not call mark_as_done tool. Using message content as fallback summary. This may indicate the AI is not following the tool-calling pattern correctly.");
                 reviewState.summary = message.content;
             }
             return (
