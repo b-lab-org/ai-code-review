@@ -311,6 +311,13 @@ class InputProcessor {
                     return null;
                 }
 
+                // Check if both patches exist (patch is undefined for binary files or files without actual changes)
+                if (!incFile.patch || !prFile.patch) {
+                    filteredOutFiles.push(incFile.filename);
+                    core.debug(`File missing patch data (possibly binary or no content changes): ${incFile.filename}`);
+                    return null;
+                }
+
                 // Filter hunks within the file
                 const filteredPatch = filterPatchHunks(incFile.patch, prFile.patch);
 
