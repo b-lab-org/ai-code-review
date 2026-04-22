@@ -32,12 +32,13 @@ class SimpleMutex {
 }
 
 class BaseAIAgent {
-    constructor(apiKey, fileContentGetter, fileCommentator, model, reviewRulesContent) {
+    constructor(apiKey, fileContentGetter, fileCommentator, model, reviewRulesContent, codebaseSearcher) {
         this.apiKey = apiKey;
         this.fileContentGetter = fileContentGetter;
         this.fileCommentator = fileCommentator;
         this.model = model;
         this.reviewRulesContent = reviewRulesContent;
+        this.codebaseSearcher = codebaseSearcher;
         this.fileCache = new Map();
         this.cacheMutex = new SimpleMutex();
         this.MAX_CACHE_ENTRIES = constants.MAX_CACHE_ENTRIES;
@@ -134,6 +135,12 @@ Your summary should be a single cohesive paragraph (or a few short paragraphs) d
 Lines are 1-indexed. Do not comment on trivial issues or style preferences.
 Be concise but thorough in your review.
 => MODE NO-FALSE-POSITIVES IS ON.`;
+
+        if (this.codebaseSearcher) {
+            prompt += `\n\nYou also have access to the grep_codebase tool, which lets you search across the ENTIRE codebase (not just files in the diff). Use this when you need to find callers of a changed function, check how a pattern is used elsewhere, look for related implementations, or verify definitions in other files. It supports extended regular expressions (e.g. \`functionName\\s*\\(\`, \`import.*module\`).
+
+The grep_codebase tool returns results in the format \`path/to/file.js:42:  matching line content\`, one match per line. You can use the file path and line number from the results to call get_file_content for more context around a match.`;
+        }
 
         if (this.reviewRulesContent) {
             prompt += `\n\nAdditionally, adhere to the following custom review rules:\n${this.reviewRulesContent}`;
@@ -289,6 +296,18 @@ Focus only on NEW issues not already covered by your previous comments.`;
         } catch (error) {
             this.handleError(error, "Error creating review comment", false);
             return `Error! Please ensure that the lines you specify for the comment are part of the DIFF! Error message: ${error.message}`;
+        }
+    }
+
+    async searchCodebase(pattern, fileGlob, caseSensitive) {
+        if (!this.codebaseSearcher) {
+            return "Error: codebase search is not available. The checkout_dir input was not set.";
+        }
+        try {
+            return await this.codebaseSearcher(pattern, fileGlob, caseSensitive);
+        } catch (error) {
+            this.handleError(error, "Error searching codebase", false);
+            return `Error searching codebase: ${error.message}`;
         }
     }
 

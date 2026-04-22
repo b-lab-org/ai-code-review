@@ -13,8 +13,8 @@ const { MAX_REVIEW_ITERATIONS } = require("./constants");
  * **Public API is unchanged**; only internal loop/iteration logic was fixed.
  */
 class OpenAIAgent extends BaseAIAgent {
-    constructor(apiKey, fileContentGetter, fileCommentator, model, reviewRulesContent, baseURL = null) {
-        super(apiKey, fileContentGetter, fileCommentator, model, reviewRulesContent);
+    constructor(apiKey, fileContentGetter, fileCommentator, model, reviewRulesContent, codebaseSearcher, baseURL) {
+        super(apiKey, fileContentGetter, fileCommentator, model, reviewRulesContent, codebaseSearcher);
 
         if (!baseURL || baseURL.trim() === "") {
             core.info("Using default OpenAI API URL");
@@ -74,6 +74,25 @@ class OpenAIAgent extends BaseAIAgent {
                 }
             }
         ];
+
+        if (this.codebaseSearcher) {
+            this.tools.push({
+                type: "function",
+                function: {
+                    name: "grep_codebase",
+                    description: "Searches the entire codebase using extended regex. Returns matching lines with file paths and line numbers. Use to find callers, related code, definitions, or usages across the project.",
+                    parameters: {
+                        type: "object",
+                        properties: {
+                            pattern: { type: "string", description: "Extended regex pattern to search for (e.g. \"functionName\\s*\\(\", \"import.*module\", or a plain string like \"TODO\")" },
+                            file_glob: { type: "string", description: "Optional glob pattern to filter files. Examples: \"*.js\", \"*.py\", \"*.ts\". If omitted, searches all files." },
+                            case_sensitive: { type: "boolean", description: "Whether the search should be case-sensitive. Defaults to false (case-insensitive)." }
+                        },
+                        required: ["pattern"]
+                    }
+                }
+            });
+        }
     }
 
 
@@ -157,6 +176,11 @@ class OpenAIAgent extends BaseAIAgent {
                                 case "mark_as_done": {
                                     reviewState.summary = input.brief_summary;
                                     return null; // no reply message needed
+                                }
+                                case "grep_codebase": {
+                                    const { pattern, file_glob, case_sensitive = false } = input;
+                                    toolOutput = await this.searchCodebase(pattern, file_glob, case_sensitive);
+                                    break;
                                 }
                                 default:
                                     toolOutput = `Unknown tool: ${toolCall.function.name}`;
