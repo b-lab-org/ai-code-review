@@ -139,7 +139,17 @@ Be concise but thorough in your review.
         if (this.codebaseSearcher) {
             prompt += `\n\nYou also have access to the grep_codebase tool, which lets you search across the ENTIRE codebase (not just files in the diff). Use this when you need to find callers of a changed function, check how a pattern is used elsewhere, look for related implementations, or verify definitions in other files. It supports extended regular expressions (e.g. \`functionName\\s*\\(\`, \`import.*module\`).
 
-The grep_codebase tool returns results in the format \`path/to/file.js:42:  matching line content\`, one match per line. You can use the file path and line number from the results to call get_file_content for more context around a match.`;
+The grep_codebase tool returns results in the format \`path/to/file.js:42:  matching line content\`, one match per line. You can use the file path and line number from the results to call get_file_content for more context around a match.
+
+VERIFY BEFORE COMMENTING — Since you have grep_codebase, you MUST use it to verify assumptions before posting a comment. If you are unsure whether something is actually a problem, search the codebase to confirm. NEVER post speculative comments like "if X is still used...", "please ensure...", "consider checking whether...", or "this could cause issues if...".
+
+Examples of when to search first:
+- A shared definition was removed (translation key, config value, exported function/type, feature flag) → search for remaining references that would break
+- A function could return null/error → search for callers to check if they handle it
+- An API or interface changed → search for consumers still using the old contract
+Do NOT search for things that were simply removed from one file's imports or usage — that is just normal cleanup, not a potential issue.
+
+Use grep_codebase to turn every "maybe" into a "yes" or "no". If your search confirms there is no problem, do not comment. Verified issues are valuable; unverified concerns are noise.`;
         }
 
         if (this.reviewRulesContent) {
@@ -304,7 +314,10 @@ Focus only on NEW issues not already covered by your previous comments.`;
             return "Error: codebase search is not available. The checkout_dir input was not set.";
         }
         try {
-            return await this.codebaseSearcher(pattern, fileGlob, caseSensitive);
+            core.info(`grep_codebase(pattern: "${pattern}", glob: "${fileGlob || "*"}", caseSensitive: ${caseSensitive})`);
+            const result = await this.codebaseSearcher(pattern, fileGlob, caseSensitive);
+            core.debug(`grep_codebase result: ${result}`);
+            return result;
         } catch (error) {
             this.handleError(error, "Error searching codebase", false);
             return `Error searching codebase: ${error.message}`;

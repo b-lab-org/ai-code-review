@@ -21,7 +21,7 @@ const LINE_SPAN = 20;
 const MAX_CACHE_ENTRIES = 1000;
 
 // Maximum output size from grep search (bytes)
-const MAX_GREP_OUTPUT_BYTES = 64 * 1024; // 64KB
+const MAX_GREP_OUTPUT_BYTES = 16 * 1024; // 16KB
 
 // Maximum matches per file for grep
 const MAX_GREP_MATCHES_PER_FILE = 100;
