@@ -30,6 +30,9 @@ This prevention works by providing the AI with context about previous comments:
 
 **Note**: This is a best-effort approach that relies on the AI model's ability to recognize duplicate issues. In some cases, the AI may still post similar comments if it perceives them as addressing different aspects of the same code or if the code context has changed significantly.
 
+### Codebase Search
+With `checkout_dir` enabled, the AI can search the entire codebase during the review — not just the files in the diff. This lets it verify its own assumptions before commenting, turning speculative "please check..." comments into confirmed issues or silence. See the `checkout_dir` input for setup details.
+
 ## Inputs
 
 ***token*** - Required. This GitHub token is used for authentication and to access your GitHub repository.
@@ -85,6 +88,8 @@ This prevention works by providing the AI with context about previous comments:
 
 ***review_rules_file*** - Optional. Path to a file in the repository containing custom review rules to be added to the AI system prompt.
 
+***checkout_dir*** - Optional. Path to a git checkout of the repository. When provided, enables the AI to search the entire codebase using a grep tool (powered by `git grep`), allowing it to verify assumptions (e.g., checking if a removed function is still referenced elsewhere) before posting comments. This significantly reduces false positives and speculative comments. **Note:** The search runs against whatever branch is currently checked out in that directory — it does not automatically switch to the PR branch. It is recommended to use `actions/checkout` to ensure the correct branch is checked out.
+
 ## Usage Examples
 
 Create a new `.github/workflows/ai-code-review.yml` file in your GitHub repository. Below are examples for different AI providers:
@@ -103,7 +108,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: AI Code Review
-      uses: AleksandrFurmenkovOfficial/ai-code-review@v1.0
+      uses: b-lab-org/ai-code-review@<commit-sha>
       with:
         token: ${{ secrets.GITHUB_TOKEN }}
         owner: ${{ github.repository_owner }}
@@ -129,7 +134,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: AI Code Review
-      uses: AleksandrFurmenkovOfficial/ai-code-review@v1.0
+      uses: b-lab-org/ai-code-review@<commit-sha>
       with:
         token: ${{ secrets.GITHUB_TOKEN }}
         owner: ${{ github.repository_owner }}
@@ -155,7 +160,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: AI Code Review
-      uses: AleksandrFurmenkovOfficial/ai-code-review@v1.0
+      uses: b-lab-org/ai-code-review@<commit-sha>
       with:
         token: ${{ secrets.GITHUB_TOKEN }}
         owner: ${{ github.repository_owner }}
@@ -181,7 +186,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: AI Code Review
-      uses: AleksandrFurmenkovOfficial/ai-code-review@v1.0
+      uses: b-lab-org/ai-code-review@<commit-sha>
       with:
         token: ${{ secrets.GITHUB_TOKEN }}
         owner: ${{ github.repository_owner }}
@@ -207,7 +212,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: AI Code Review
-      uses: AleksandrFurmenkovOfficial/ai-code-review@v1.0
+      uses: b-lab-org/ai-code-review@<commit-sha>
       with:
         token: ${{ secrets.GITHUB_TOKEN }}
         owner: ${{ github.repository_owner }}
@@ -233,7 +238,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: AI Code Review
-      uses: AleksandrFurmenkovOfficial/ai-code-review@v1.0
+      uses: b-lab-org/ai-code-review@<commit-sha>
       with:
         token: ${{ secrets.GITHUB_TOKEN }}
         owner: ${{ github.repository_owner }}
@@ -243,6 +248,36 @@ jobs:
         ai_provider: 'perplexity'
         perplexity_api_key: ${{ secrets.PERPLEXITY_API_KEY }}
         perplexity_model: 'sonar-reasoning-pro'
+```
+
+### Codebase Search Example
+
+```yaml
+name: AI Code Review with Codebase Search
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+jobs:
+  ai_code_review:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v6
+
+    - name: AI Code Review
+      uses: b-lab-org/ai-code-review@<commit-sha>
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        owner: ${{ github.repository_owner }}
+        repo: ${{ github.event.repository.name }}
+        pr_number: ${{ github.event.number }}
+
+        ai_provider: 'openai'
+        openai_api_key: ${{ secrets.OPENAI_API_KEY }}
+        openai_model: 'gpt-5.2'
+        checkout_dir: ${{ github.workspace }}
 ```
 
 ### Advanced Configuration Example
@@ -259,7 +294,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: AI Code Review
-      uses: AleksandrFurmenkovOfficial/ai-code-review@v1.0
+      uses: b-lab-org/ai-code-review@<commit-sha>
       with:
         token: ${{ secrets.GITHUB_TOKEN }}
         owner: ${{ github.repository_owner }}
