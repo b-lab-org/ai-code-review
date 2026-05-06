@@ -139,11 +139,14 @@ Be concise but thorough in your review.
         if (this.codebaseSearcher) {
             prompt += `\n\nYou also have access to the grep_codebase tool, which lets you search across the ENTIRE codebase (not just files in the diff). Use this when you need to find callers of a changed function, check how a pattern is used elsewhere, look for related implementations, or verify definitions in other files. It supports extended regular expressions (e.g. \`functionName\\s*\\(\`, \`import.*module\`).
 
+Tip: prefer \`\\s+\` over literal spaces in patterns — code formatting varies and \`\\s+\` matches any whitespace (spaces, tabs, multiple spaces). For example, use \`func\\s+Coalesce\` instead of \`func Coalesce\`.
+
 The grep_codebase tool returns results in the format \`path/to/file.js:42:  matching line content\`, one match per line. You can use the file path and line number from the results to call get_file_content for more context around a match.
 
 VERIFY BEFORE COMMENTING — Since you have grep_codebase, you MUST use it to verify assumptions before posting a comment. If you are unsure whether something is actually a problem, search the codebase to confirm. NEVER post speculative comments like "if X is still used...", "please ensure...", "consider checking whether...", or "this could cause issues if...".
 
 Examples of when to search first:
+- Code calls a function/method/type you don't fully know → search for its definition (e.g. \`func\\s+Coalesce\`, \`class\\s+MyType\`, \`def\\s+helper\`) and read its signature BEFORE commenting on return types, argument types, or behavior. Getting a type wrong because you guessed instead of looking is the #1 source of false positives.
 - A shared definition was removed (translation key, config value, exported function/type, feature flag) → search for remaining references that would break
 - A function could return null/error → search for callers to check if they handle it
 - An API or interface changed → search for consumers still using the old contract
