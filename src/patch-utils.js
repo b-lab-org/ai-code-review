@@ -243,17 +243,25 @@ function extractRelevantDiffHunk(diffHunk, startLine, endLine, side = "RIGHT") {
         for (const change of relevantChanges) {
             if (change.type === 'normal') {
                 // Context line exists in both old and new
-                if (oldStart === 0) oldStart = change.ln1;
-                if (newStart === 0) newStart = change.ln2;
+                if (oldStart === 0) {
+                    oldStart = change.ln1;
+                }
+                if (newStart === 0) {
+                    newStart = change.ln2;
+                }
                 oldLines++;
                 newLines++;
             } else if (change.type === 'del') {
                 // Deletion exists only in old file
-                if (oldStart === 0) oldStart = change.ln;
+                if (oldStart === 0) {
+                    oldStart = change.ln;
+                }
                 oldLines++;
             } else if (change.type === 'add') {
                 // Addition exists only in new file
-                if (newStart === 0) newStart = change.ln;
+                if (newStart === 0) {
+                    newStart = change.ln;
+                }
                 newLines++;
             }
         }
@@ -277,7 +285,52 @@ function extractRelevantDiffHunk(diffHunk, startLine, endLine, side = "RIGHT") {
     }
 }
 
+/**
+ * Parses a single-file diff section into a GitHub API-compatible file object.
+ * Returns null if the diff is empty or cannot be parsed.
+ *
+ * @param {string} diffSection - Raw diff text for a single file (from "diff --git" through all hunks)
+ * @returns {{filename: string, status: string, patch: string|undefined, additions: number, deletions: number}|null}
+ */
+function parseDiffFileSection(diffSection) {
+    if (!diffSection) {
+        return null;
+    }
+    try {
+        const files = parseDiff(diffSection);
+        const file = files[0];
+        if (!file) {
+            return null;
+        }
+
+        let status = "modified";
+        if (file.new) {
+            status = "added";
+        } else if (file.deleted) {
+            status = "removed";
+        } else if (file.renamed) {
+            status = "renamed";
+        }
+
+        // Extract raw patch: everything from the first hunk header onwards
+        const patchMatch = diffSection.match(/^@@/m);
+        const patch = patchMatch ? diffSection.slice(patchMatch.index) : undefined;
+
+        return {
+            filename: file.to || file.from || "unknown",
+            status,
+            patch,
+            additions: file.additions,
+            deletions: file.deletions,
+        };
+    } catch (error) {
+        core.error(`parseDiffFileSection: Error parsing diff: ${error.message}`);
+        return null;
+    }
+}
+
 module.exports = {
     filterPatchHunks,
     extractRelevantDiffHunk,
+    parseDiffFileSection,
 };

@@ -18,10 +18,10 @@ class OpenAIAgent extends BaseAIAgent {
 
         if (!baseURL || baseURL.trim() === "") {
             core.info("Using default OpenAI API URL");
-            this.openai = new OpenAI({ apiKey });
+            this.openai = new OpenAI({ apiKey, maxRetries: 10 });
         } else {
             core.info(`Using custom baseURL: ${baseURL}`);
-            this.openai = new OpenAI({ apiKey, baseURL });
+            this.openai = new OpenAI({ apiKey, baseURL, maxRetries: 10 });
         }
 
         this.tools = [

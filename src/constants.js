@@ -20,14 +20,11 @@ const LINE_SPAN = 20;
  // Maximum number of entries in the file cache
 const MAX_CACHE_ENTRIES = 1000;
 
-// Maximum output size from grep search (bytes)
-const MAX_GREP_OUTPUT_BYTES = 16 * 1024; // 16KB
-
 // Maximum matches per file for grep
 const MAX_GREP_MATCHES_PER_FILE = 100;
 
-// Timeout for grep search (milliseconds)
-const GREP_TIMEOUT_MS = 30000; // 30s
+// Timeout for local git commands (milliseconds)
+const GIT_TIMEOUT_MS = 30000; // 30s
 
 // Paths to always exclude from grep searches
 const GREP_EXCLUDE_PATHS = [".github"];
@@ -39,8 +36,7 @@ module.exports = {
     MAX_FILE_SIZE_BYTES,
     LINE_SPAN,
     MAX_CACHE_ENTRIES,
-    MAX_GREP_OUTPUT_BYTES,
     MAX_GREP_MATCHES_PER_FILE,
-    GREP_TIMEOUT_MS,
+    GIT_TIMEOUT_MS,
     GREP_EXCLUDE_PATHS
 };
