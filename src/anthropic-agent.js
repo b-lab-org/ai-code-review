@@ -336,6 +336,17 @@ class AnthropicAgent extends BaseAIAgent {
 
         return this.handleMessageResponse(nextMessage, tools, reviewState);
     }
+
+    async synthesizeSummary(batchSummaries) {
+        const { system, user } = this.getSynthesisPrompt(batchSummaries);
+        const response = await this.anthropic.messages.create({
+            model: this.model,
+            max_tokens: 4096,
+            system,
+            messages: [{ role: "user", content: user }]
+        });
+        return response.content[0].text;
+    }
 }
 
 module.exports = AnthropicAgent;

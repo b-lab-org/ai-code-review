@@ -90,6 +90,8 @@ With `checkout_dir` enabled, the AI can search the entire codebase during the re
 
 ***checkout_dir*** - Optional. Path to a git checkout of the repository. When provided, enables the AI to search the entire codebase using a grep tool (powered by `git grep`), allowing it to verify assumptions (e.g., checking if a removed function is still referenced elsewhere) before posting comments. This significantly reduces false positives and speculative comments. **Note:** The search runs against whatever branch is currently checked out in that directory — it does not automatically switch to the PR branch. It is recommended to use `actions/checkout` to ensure the correct branch is checked out.
 
+***batch_size*** - Optional. Number of files to review per AI call. Use `"all"` (default) to send all files in a single request, or a number for batched review (e.g., `"5"` for groups of 5, `"1"` for per-file). When batching is enabled, files are also grouped by total patch size — a new batch starts when either the file count or the cumulative patch size (1MB) is reached. Multiple batch summaries are automatically synthesized into a single cohesive review. Batching is recommended for large PRs to avoid exceeding the AI model's context window.
+
 ## Usage Examples
 
 Create a new `.github/workflows/ai-code-review.yml` file in your GitHub repository. Below are examples for different AI providers:
@@ -278,6 +280,7 @@ jobs:
         openai_api_key: ${{ secrets.OPENAI_API_KEY }}
         openai_model: 'gpt-5.2'
         checkout_dir: ${{ github.workspace }}
+        batch_size: '10'
 ```
 
 ### Advanced Configuration Example
@@ -329,6 +332,7 @@ jobs:
 #### Error: "This model's maximum context length is exceeded"
 - **Problem**: The AI model can't process all the provided code due to token limitations
 - **Solution**: 
-  1. Use exclude_paths to skip large files
-  2. Use include_extensions to focus only on critical file types
-  3. Make smaller PRs with fewer changed files
+  1. Set `batch_size` to split files into smaller groups (e.g., `"10"`)
+  2. Use exclude_paths to skip large files
+  3. Use include_extensions to focus only on critical file types
+  4. Make smaller PRs with fewer changed files

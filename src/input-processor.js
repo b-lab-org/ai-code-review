@@ -13,6 +13,7 @@ const PerplexityAgent = require("./perplexity-agent");
 const { AI_REVIEW_COMMENT_PREFIX, SUMMARY_SEPARATOR } = require("./constants");
 const { filterPatchHunks, extractRelevantDiffHunk } = require("./patch-utils");
 const { LocalContext } = require("./checkout-dir-utils");
+const { MAX_FILE_SIZE_BYTES } = require("./constants");
 
 /* -------------------------------------------------------------------------- */
 /*                               Sanitizers                                   */
@@ -93,6 +94,7 @@ class InputProcessor {
         this._previousAIComments = [];
         this._localContext = null;
         this._codebaseSearcher = null;
+        this._batchSize = "all";
     }
 
     /* ----------------------------- Public API ------------------------------ */
@@ -137,6 +139,8 @@ class InputProcessor {
         this._excludePaths = sanitizePath(core.getInput("exclude_paths"));
         this._reviewRulesFile = sanitizePath(core.getInput("review_rules_file"));
         this._aiBotUsername = sanitizeString(core.getInput("ai_bot_username")) || "github-actions[bot]";
+        const batchSizeRaw = sanitizeString(core.getInput("batch_size")).toLowerCase() || "all";
+        this._batchSize = batchSizeRaw === "all" ? "all" : Number(batchSizeRaw);
 
         core.info(`AI bot username: ${this._aiBotUsername}`);
 
@@ -193,6 +197,9 @@ class InputProcessor {
             throw new Error(`Unsupported AI provider: ${this._aiProvider}. Supported providers: ${supportedProviders.join(", ")}`);
         }
 
+        if (this._batchSize !== "all" && (!Number.isInteger(this._batchSize) || this._batchSize < 1)) {
+            throw new Error(`batch_size must be "all" or a positive integer, got: "${this._batchSize}"`);
+        }
     }
 
     async _setupGitHubAPI() {
@@ -439,13 +446,16 @@ class InputProcessor {
 
         const shouldReview = file => {
             const filePath = file.filename.replace(/\\/g, "/");
-            const ext = path.posix.extname(filePath);
-
-            const extAllowed = !incExt.length || incExt.includes(ext);
-            const extExcluded = excExt.includes(ext);
+            const extAllowed = !incExt.length || incExt.some(e => filePath.endsWith(e));
+            const extExcluded = excExt.some(e => filePath.endsWith(e));
 
             const inAllowedPath = !incPath.length || incPath.some(p => filePath.startsWith(p));
             const inExcludedPath = excPath.some(p => filePath.startsWith(p));
+
+            if (file.patch && file.patch.length > MAX_FILE_SIZE_BYTES) {
+                core.warning(`Skipping ${filePath}: patch too large (${Math.round(file.patch.length / 1024)}KB)`);
+                return false;
+            }
 
             return extAllowed && !extExcluded && inAllowedPath && !inExcludedPath;
         };
@@ -531,6 +541,7 @@ class InputProcessor {
     get pullNumber() { return this._pullNumber; }
     get failAction() { return this._failAction; }
     get previousComments() { return this._previousAIComments; }
+    get batchSize() { return this._batchSize; }
 }
 
 module.exports = InputProcessor;

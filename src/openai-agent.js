@@ -312,6 +312,18 @@ class OpenAIAgent extends BaseAIAgent {
         }
     }
 
+    async synthesizeSummary(batchSummaries) {
+        const { system, user } = this.getSynthesisPrompt(batchSummaries);
+        const response = await this.openai.chat.completions.create({
+            model: this.model,
+            messages: [
+                { role: "system", content: system },
+                { role: "user", content: user }
+            ]
+        });
+        return response.choices[0].message.content;
+    }
+
     /* helper stubs (public API unchanged) ------------------------------ */
     getFileContent(args) {
         const { pathToFile, startLineNumber, endLineNumber } = args;

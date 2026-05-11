@@ -146,7 +146,7 @@ The grep_codebase tool returns results in the format \`path/to/file.js:42:  matc
 VERIFY BEFORE COMMENTING — Since you have grep_codebase, you MUST use it to verify assumptions before posting a comment. If you are unsure whether something is actually a problem, search the codebase to confirm. NEVER post speculative comments like "if X is still used...", "please ensure...", "consider checking whether...", or "this could cause issues if...".
 
 Examples of when to search first:
-- Code calls a function/method/type you don't fully know → search for its definition (e.g. \`func\\s+Coalesce\`, \`class\\s+MyType\`, \`def\\s+helper\`) and read its signature BEFORE commenting on return types, argument types, or behavior. Getting a type wrong because you guessed instead of looking is the #1 source of false positives.
+- Code calls a function/method/type you don't fully know → search for its definition (e.g. \`func\\s+Coalesce\`, \`class\\s+MyType\`, \`def\\s+helper\`) and read its full signature BEFORE commenting on return types, argument types, or behavior. This is MANDATORY — do NOT assume what a function returns or what its parameters mean. A discarded return value is not necessarily an ignored error; an unused parameter is not necessarily a bug. Always look up the function definition to confirm. Getting a type wrong because you guessed instead of looking is the #1 source of false positives.
 - A shared definition was removed (translation key, config value, exported function/type, feature flag) → search for remaining references that would break
 - A function could return null/error → search for callers to check if they handle it
 - An API or interface changed → search for consumers still using the old contract
@@ -325,6 +325,21 @@ Focus only on NEW issues not already covered by your previous comments.`;
             this.handleError(error, "Error searching codebase", false);
             return `Error searching codebase: ${error.message}`;
         }
+    }
+
+    getSynthesisPrompt(batchSummaries) {
+        const summariesText = batchSummaries
+            .map((s, i) => `### Batch ${i + 1}:\n${s}`)
+            .join('\n\n');
+
+        return {
+            system: "You are a code review summarizer. Given batch review summaries from a PR, write a single cohesive summary. Focus on what changed, the quality of changes, and any patterns. Be concise.",
+            user: `Here are the batch review summaries:\n\n${summariesText}\n\nWrite a cohesive overall summary.`
+        };
+    }
+
+    synthesizeSummary(_batchSummaries) {
+        throw new Error("Method 'synthesizeSummary' must be implemented by subclass");
     }
 
     doReview(_changedFiles) {
