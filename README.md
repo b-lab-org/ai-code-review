@@ -88,7 +88,7 @@ With `checkout_dir` enabled, the AI can search the entire codebase during the re
 
 ***review_rules_file*** - Optional. Path to a file in the repository containing custom review rules to be added to the AI system prompt.
 
-***checkout_dir*** - Optional. Path to a git checkout of the repository. When provided, enables the AI to search the entire codebase using a grep tool (powered by `git grep`), allowing it to verify assumptions (e.g., checking if a removed function is still referenced elsewhere) before posting comments. This significantly reduces false positives and speculative comments. **Note:** The search runs against whatever branch is currently checked out in that directory — it does not automatically switch to the PR branch. It is recommended to use `actions/checkout` to ensure the correct branch is checked out.
+***checkout_dir*** - Optional. Path to a git checkout of the repository. When provided, enables the AI to search the entire codebase using a grep tool (powered by `git grep`), allowing it to verify assumptions (e.g., checking if a removed function is still referenced elsewhere) before posting comments. This significantly reduces false positives and speculative comments. **Important:** You must check out the PR head commit specifically with `ref: ${{ github.event.pull_request.head.sha }}` in your `actions/checkout` step. By default, `actions/checkout` checks out a synthetic merge commit whose SHA differs from the PR head — this causes `git show` and `git grep` to fail when looking up files at the PR head commit.
 
 ***batch_size*** - Optional. Number of files to review per AI call. Use `"all"` (default) to send all files in a single request, or a number for batched review (e.g., `"5"` for groups of 5, `"1"` for per-file). When batching is enabled, files are also grouped by total patch size — a new batch starts when either the file count or the cumulative patch size (1MB) is reached. Multiple batch summaries are automatically synthesized into a single cohesive review. Batching is recommended for large PRs to avoid exceeding the AI model's context window.
 
@@ -265,8 +265,10 @@ jobs:
   ai_code_review:
     runs-on: ubuntu-latest
     steps:
-    - name: Checkout code
+    - name: Checkout PR head
       uses: actions/checkout@v6
+      with:
+        ref: ${{ github.event.pull_request.head.sha }}
 
     - name: AI Code Review
       uses: b-lab-org/ai-code-review@<commit-sha>
