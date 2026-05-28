@@ -86,6 +86,13 @@ inputs:
     description: 'GitHub username of the AI bot making review comments (used to filter previous comments). Default is "github-actions[bot]"'
     required: false
     default: 'github-actions[bot]'
+  checkout_dir:
+    description: 'Path to a local checkout of the repository. When set, file content is read from disk instead of GitHub API, and the grep_codebase tool becomes available.'
+    required: false
+  batch_size:
+    description: 'Number of files to review per AI call. Use "all" to send all files at once (default), or a number for batched review (e.g., "1" for per-file, "5" for groups of 5).'
+    required: false
+    default: 'all'
 
 runs:
   using: 'node20'

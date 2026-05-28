@@ -20,11 +20,23 @@ const LINE_SPAN = 20;
  // Maximum number of entries in the file cache
 const MAX_CACHE_ENTRIES = 1000;
 
+// Maximum matches per file for grep
+const MAX_GREP_MATCHES_PER_FILE = 100;
+
+// Timeout for local git commands (milliseconds)
+const GIT_TIMEOUT_MS = 30000; // 30s
+
+// Paths to always exclude from grep searches
+const GREP_EXCLUDE_PATHS = [".github"];
+
 module.exports = {
     AI_REVIEW_COMMENT_PREFIX,
     SUMMARY_SEPARATOR,
     MAX_REVIEW_ITERATIONS,
     MAX_FILE_SIZE_BYTES,
     LINE_SPAN,
-    MAX_CACHE_ENTRIES
+    MAX_CACHE_ENTRIES,
+    MAX_GREP_MATCHES_PER_FILE,
+    GIT_TIMEOUT_MS,
+    GREP_EXCLUDE_PATHS
 };

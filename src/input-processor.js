@@ -12,6 +12,8 @@ const XAgent = require("./x-agent");
 const PerplexityAgent = require("./perplexity-agent");
 const { AI_REVIEW_COMMENT_PREFIX, SUMMARY_SEPARATOR } = require("./constants");
 const { filterPatchHunks, extractRelevantDiffHunk } = require("./patch-utils");
+const { LocalContext } = require("./checkout-dir-utils");
+const { MAX_FILE_SIZE_BYTES } = require("./constants");
 
 /* -------------------------------------------------------------------------- */
 /*                               Sanitizers                                   */
@@ -34,7 +36,6 @@ function sanitizeString(value, { maxLen = 10_000, context = "none" } = {}) {
     }
 }
 
-// eslint-disable-next-line no-unused-vars
 function sanitizeNumber(value, { min = 0, max = Number.MAX_SAFE_INTEGER } = {}) {
     const num = Number(value);
     if (Number.isNaN(num)) {
@@ -91,6 +92,9 @@ class InputProcessor {
         this._reviewRulesContent = null;
         this._aiBotUsername = null;
         this._previousAIComments = [];
+        this._localContext = null;
+        this._codebaseSearcher = null;
+        this._batchSize = "all";
     }
 
     /* ----------------------------- Public API ------------------------------ */
@@ -109,10 +113,21 @@ class InputProcessor {
     /* --------------------------- Private helpers --------------------------- */
 
     _readInputs() {
-        this._repo = sanitizeString(core.getInput("repo", { required: true, trimWhitespace: true }));
-        this._owner = sanitizeString(core.getInput("owner", { required: true, trimWhitespace: true }));
-        this._pullNumber = sanitizeNumber(core.getInput("pr_number", { required: true, trimWhitespace: true }), { min: 1 });
-        this._githubToken = sanitizeString(core.getInput("token", { required: true, trimWhitespace: true }));
+        const checkoutDirInput = sanitizePath(core.getInput("checkout_dir"));
+        this._localContext = new LocalContext(checkoutDirInput);
+
+        if (this._localContext.isFullLocalMode) {
+            this._repo = "local";
+            this._owner = "local";
+            this._pullNumber = 0;
+            this._githubToken = "";
+        } else {
+            this._repo = sanitizeString(core.getInput("repo", { required: true, trimWhitespace: true }));
+            this._owner = sanitizeString(core.getInput("owner", { required: true, trimWhitespace: true }));
+            this._pullNumber = sanitizeNumber(core.getInput("pr_number", { required: true, trimWhitespace: true }), { min: 1 });
+            this._githubToken = sanitizeString(core.getInput("token", { required: true, trimWhitespace: true }));
+        }
+
         this._aiProvider = sanitizeString(core.getInput("ai_provider", { required: true, trimWhitespace: true })).toLowerCase();
         this._apiKey = sanitizeString(core.getInput(`${this._aiProvider}_api_key`, { required: true, trimWhitespace: true }));
         this._model = sanitizeString(core.getInput(`${this._aiProvider}_model`, { required: true, trimWhitespace: true }));
@@ -124,8 +139,18 @@ class InputProcessor {
         this._excludePaths = sanitizePath(core.getInput("exclude_paths"));
         this._reviewRulesFile = sanitizePath(core.getInput("review_rules_file"));
         this._aiBotUsername = sanitizeString(core.getInput("ai_bot_username")) || "github-actions[bot]";
+        const batchSizeRaw = sanitizeString(core.getInput("batch_size")).toLowerCase() || "all";
+        this._batchSize = batchSizeRaw === "all" ? "all" : Number(batchSizeRaw);
 
         core.info(`AI bot username: ${this._aiBotUsername}`);
+
+        if (this._localContext.isFullLocalMode) {
+            core.info(`Local mode enabled, using checkout directory: ${this._localContext.checkoutDir}`);
+        } else if (this._localContext.hasLocalAccess) {
+            core.info(`Using local checkout directory: ${this._localContext.checkoutDir}`);
+        } else {
+            core.info("No checkout directory specified, using GitHub API for file content");
+        }
 
         if (!this._includeExtensions) {
             core.info("Using default: include all extensions");
@@ -146,17 +171,19 @@ class InputProcessor {
     }
 
     _validateInputs() {
-        if (!this._repo) {
-            throw new Error("Repository name is required.");
-        }
-        if (!this._owner) {
-            throw new Error("Owner name is required.");
-        }
-        if (!this._pullNumber) {
-            throw new Error("Pull request number must be a valid number.");
-        }
-        if (!this._githubToken) {
-            throw new Error("GitHub token is required.");
+        if (!this._localContext.isFullLocalMode) {
+            if (!this._repo) {
+                throw new Error("Repository name is required.");
+            }
+            if (!this._owner) {
+                throw new Error("Owner name is required.");
+            }
+            if (!this._pullNumber) {
+                throw new Error("Pull request number must be a valid number.");
+            }
+            if (!this._githubToken) {
+                throw new Error("GitHub token is required.");
+            }
         }
         if (!this._aiProvider) {
             throw new Error("AI provider is required.");
@@ -169,10 +196,18 @@ class InputProcessor {
         if (!supportedProviders.includes(this._aiProvider)) {
             throw new Error(`Unsupported AI provider: ${this._aiProvider}. Supported providers: ${supportedProviders.join(", ")}`);
         }
+
+        if (this._batchSize !== "all" && (!Number.isInteger(this._batchSize) || this._batchSize < 1)) {
+            throw new Error(`batch_size must be "all" or a positive integer, got: "${this._batchSize}"`);
+        }
     }
 
     async _setupGitHubAPI() {
-        this._githubAPI = new GitHubAPI(this._githubToken);
+        if (this._localContext.isFullLocalMode) {
+            this._githubAPI = this._localContext.createGitHubAPI();
+        } else {
+            this._githubAPI = new GitHubAPI(this._githubToken);
+        }
         const pullRequestData = await this._githubAPI.getPullRequest(this._owner, this._repo, this._pullNumber);
         this._headCommit = pullRequestData.head.sha;
         this._baseCommit = pullRequestData.base.sha;
@@ -411,13 +446,16 @@ class InputProcessor {
 
         const shouldReview = file => {
             const filePath = file.filename.replace(/\\/g, "/");
-            const ext = path.posix.extname(filePath);
-
-            const extAllowed = !incExt.length || incExt.includes(ext);
-            const extExcluded = excExt.includes(ext);
+            const extAllowed = !incExt.length || incExt.some(e => filePath.endsWith(e));
+            const extExcluded = excExt.some(e => filePath.endsWith(e));
 
             const inAllowedPath = !incPath.length || incPath.some(p => filePath.startsWith(p));
             const inExcludedPath = excPath.some(p => filePath.startsWith(p));
+
+            if (file.patch && file.patch.length > MAX_FILE_SIZE_BYTES) {
+                core.warning(`Skipping ${filePath}: patch too large (${Math.round(file.patch.length / 1024)}KB)`);
+                return false;
+            }
 
             return extAllowed && !extExcluded && inAllowedPath && !inExcludedPath;
         };
@@ -429,13 +467,17 @@ class InputProcessor {
         if (this._reviewRulesFile) {
             core.info(`Attempting to load review rules from: ${this._reviewRulesFile}`);
             try {
-                this._reviewRulesContent = await this._githubAPI.getContent(
-                    this._owner,
-                    this._repo,
-                    this._headCommit, // Use head commit to get the latest version of the rules file
-                    this._headCommit,
-                    this._reviewRulesFile
-                );
+                if (this._localContext.hasLocalAccess) {
+                    this._reviewRulesContent = this._localContext.readFile(this._reviewRulesFile, this._headCommit);
+                } else {
+                    this._reviewRulesContent = await this._githubAPI.getContent(
+                        this._owner,
+                        this._repo,
+                        this._headCommit, // Use head commit to get the latest version of the rules file
+                        this._headCommit,
+                        this._reviewRulesFile
+                    );
+                }
                 core.info("Successfully loaded review rules.");
             } catch (error) {
                 core.warning(`Could not load review rules from ${this._reviewRulesFile}: ${error.message}`);
@@ -445,8 +487,14 @@ class InputProcessor {
     }
 
     _setupReviewTools() {
-        this._fileContentGetter = filePath =>
-            this._githubAPI.getContent(this._owner, this._repo, this._baseCommit, this._headCommit, filePath);
+        if (this._localContext.hasLocalAccess) {
+            this._fileContentGetter = this._localContext.createFileGetter(this._headCommit);
+            this._codebaseSearcher = this._localContext.createCodebaseSearcher(this._headCommit);
+        } else {
+            this._fileContentGetter = filePath =>
+                this._githubAPI.getContent(this._owner, this._repo, this._baseCommit, this._headCommit, filePath);
+            this._codebaseSearcher = null;
+        }
 
         this._fileCommentator = async (comment, filePath, side, startLineNumber, endLineNumber) => {
             await this._githubAPI.createReviewComment(
@@ -467,17 +515,17 @@ class InputProcessor {
     getAIAgent() {
         switch (this._aiProvider) {
             case "openai":
-                return new OpenAIAgent(this._apiKey, this._fileContentGetter, this._fileCommentator, this._model, this._reviewRulesContent);
+                return new OpenAIAgent(this._apiKey, this._fileContentGetter, this._fileCommentator, this._model, this._reviewRulesContent, this._codebaseSearcher);
             case "anthropic":
-                return new AnthropicAgent(this._apiKey, this._fileContentGetter, this._fileCommentator, this._model, this._reviewRulesContent);
+                return new AnthropicAgent(this._apiKey, this._fileContentGetter, this._fileCommentator, this._model, this._reviewRulesContent, this._codebaseSearcher);
             case "google":
-                return new GoogleAgent(this._apiKey, this._fileContentGetter, this._fileCommentator, this._model, this._reviewRulesContent);
+                return new GoogleAgent(this._apiKey, this._fileContentGetter, this._fileCommentator, this._model, this._reviewRulesContent, this._codebaseSearcher);
             case "deepseek":
-                return new DeepseekAgent(this._apiKey, this._fileContentGetter, this._fileCommentator, this._model, this._reviewRulesContent);
+                return new DeepseekAgent(this._apiKey, this._fileContentGetter, this._fileCommentator, this._model, this._reviewRulesContent, this._codebaseSearcher);
             case "x":
-                return new XAgent(this._apiKey, this._fileContentGetter, this._fileCommentator, this._model, this._reviewRulesContent);
+                return new XAgent(this._apiKey, this._fileContentGetter, this._fileCommentator, this._model, this._reviewRulesContent, this._codebaseSearcher);
             case "perplexity":
-                return new PerplexityAgent(this._apiKey, this._fileContentGetter, this._fileCommentator, this._model, this._reviewRulesContent);
+                return new PerplexityAgent(this._apiKey, this._fileContentGetter, this._fileCommentator, this._model, this._reviewRulesContent, this._codebaseSearcher);
             default:
                 throw new Error(`Unsupported AI provider: ${this._aiProvider}`);
         }
@@ -493,6 +541,7 @@ class InputProcessor {
     get pullNumber() { return this._pullNumber; }
     get failAction() { return this._failAction; }
     get previousComments() { return this._previousAIComments; }
+    get batchSize() { return this._batchSize; }
 }
 
 module.exports = InputProcessor;
